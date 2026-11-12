@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionStatus {
+  DRAFT
+  ANALYZED
+  APPROVED
+  PAYPAL_PROCESSING
+  SENT
+  FAILED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  INVALIDATED
+  REJECTED
+}
+
+enum UserRole {
+  PREPARER
+  APPROVER
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  invoiceNumber   String
+  supplierName    String
+  supplierEmail   String
+  description     String
+  amount          Decimal
+  currency        String
+  issueDate       DateTime
+  dueDate         DateTime
+  paymentTerms    String?
+  tax             Decimal?
+  discount        Decimal?
+  status          TransactionStatus @default(DRAFT)
+  approvalStatus  ApprovalStatus    @default(PENDING)
+  aiRiskLevel     String?
+  aiAnalysis      Json?
+  paypalInvoiceId String?
+  paypalInvoiceUrl String?
+  paypalStatus    String?
+  rejectedBy      String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  lineItems       InvoiceLineItem[]
+  approvals       Approval[]
+  auditEvents     AuditEvent[]
+
+  @@index([invoiceNumber])
+  @@index([supplierEmail])
+}
+
+model InvoiceLineItem {
+  id            String      @id @default(cuid())
+  transactionId String
+  description   String
+  quantity      Decimal
+  unitPrice     Decimal
+  total         Decimal
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+}
+
+model Approval {
+  id               String         @id @default(cuid())
+  transactionId    String
+  approvedBy       String
+  approvedAt       DateTime       @default(now())
+  approvedAmount   Decimal
+  approvedCurrency String
+  approvedSupplier String
+  detailsHash      String
+  transaction      Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId])
+}
+
+model AuditEvent {
+  id            String      @id @default(cuid())
+  transactionId String
+  eventType     String
+  source        String
+  details       Json
+  createdAt     DateTime    @default(now())
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId, createdAt])
+}
+
+model WebhookEvent {
+  id               String   @id @default(cuid())
+  paypalEventId    String   @unique
+  eventType        String
+  processingStatus String
+  receivedAt       DateTime @default(now())
+  processedAt      DateTime?
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  companyName  String?
+  role         UserRole  @default(PREPARER)
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
